@@ -142,6 +142,93 @@ namespace TextStrip
                 ShowWarning("Cannot delete prev Logs!");
             }
         }
+        //################################################################################## Regex Rules
+        // Source: KanoKari spreadsheet transcriptions.
+        // NOTE: Convert first to csv, Non comma delimited
+        private string RRKanokari(string s)
+        {
+            LogInvoke($"Original: {s.Trim()}");
+            string output = "";
+            // Check if string is whitespace or not
+            if (String.IsNullOrWhiteSpace(s))
+            {
+                return String.Empty;
+            }
+            else
+            {
+                // Remove everything before ':', including that character
+                string temp = Regex.Replace(s, "^[^:]*:", string.Empty, RegexOptions.IgnorePatternWhitespace);
+                temp = temp.TrimStart(':', ' ');
+                temp = temp.TrimStart();
+
+                // Strip texts of special characters inside the bracket
+                Regex pattern = new Regex("[;,!?.~*\"]");
+                temp = pattern.Replace(temp, " ");
+
+                // If string have content
+                if (string.IsNullOrWhiteSpace(temp) == false)
+                {
+                    // Replace additional characters
+                    temp = temp.Replace("[", " ");
+                    temp = temp.Replace("]", " ");
+
+                    // Lowercase
+                    temp = temp.ToLower();
+
+                    // Strip texts of: Double whitespace
+                    pattern = new Regex("[ ]{2}");
+                    while (temp.Contains("  "))
+                    {
+                        temp = pattern.Replace(temp, " ");
+                    }
+
+                    // Trim whitespace
+                    output = temp.Trim();
+                }
+                else
+                {
+                    output = String.Empty;
+                }
+
+                // Add newline before/after 'page' or 'chapter' line
+                if (output.StartsWith("chapter") || output.StartsWith("page"))
+                {
+                    string rev = $"{Environment.NewLine}{output}{Environment.NewLine}";
+                    output = rev;
+                }
+                return output;
+            }
+        }
+        // Source: MangaDex
+        // NOTE: Change this first from src file: <div class="row no-gutters"> -> <divider>
+        // change:  content = r.ReadToEnd().Split('\n').ToList<string>();
+        // to:      content = r.ReadToEnd().Split(new string[] { "<divider>" }, StringSplitOptions.None).ToList<string>();
+        private string RRGetMangaDex(string s)
+        {
+            string output = "";
+            if (String.IsNullOrWhiteSpace(s) == false)
+            {
+                try
+                {
+                    // Get Index of param
+                    int title = s.IndexOf("href='");
+                    if (title > 0)
+                    {
+                        output = s.Substring(title);
+                        int end = output.IndexOf("</a>");
+                        output = output.Substring(0, end);
+                        output = output.Replace("href='", "https://mangadex.org");
+                        output = output.Replace("' class='text-truncate'>", " - ");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log Error
+                    LogInvoke(ex.ToString());
+                }
+            }
+            return output;
+        }
         //################################################################################## CUSTOM Events
         void bgw_DoWork(object sender, DoWorkEventArgs e)
         {
@@ -179,56 +266,12 @@ namespace TextStrip
                     int percents = (COUNT_CURRENT * 100) / COUNT_MAX;
 
                     LogInvoke($"Processing item {COUNT_CURRENT} of {COUNT_MAX}...");
-                    LogInvoke($"Original: {s}");
 
-                    // Check if string is whitespace or not
-                    if (String.IsNullOrWhiteSpace(s))
-                    {
-                        // If yes, assign output as it is
-                        output = s;
-                        writeIt = true;
-                    }
-                    else
-                    {
-                        // Remove everything before ':', including that character
-                        string temp = Regex.Replace(s, "^[^:]*:", string.Empty, RegexOptions.IgnorePatternWhitespace);
-                        temp = temp.TrimStart(':', ' ');
-                        temp = temp.TrimStart();
+                    output = RRKanokari(s);
 
-                        // Strip texts of special characters inside the bracket
-                        Regex pattern = new Regex("[;,!?.~*\"]");
-                        temp = pattern.Replace(temp, string.Empty);
-
-                        if (string.IsNullOrWhiteSpace(temp) == false)
-                        {
-                            // Strip texts of: Double whitespace
-                            pattern = new Regex("[ ]{2}");
-                            while (temp.Contains("  "))
-                            {
-                                temp = pattern.Replace(temp, " ");
-                            }
-
-                            // Replace additional characters
-                            temp = temp.Replace("[", string.Empty);
-                            temp = temp.Replace("]", string.Empty);
-
-                            // Lowercase
-                            temp = temp.ToLower();
-
-                            // Trim whitespace
-                            output = temp.Trim();
-
-                            writeIt = (!String.IsNullOrWhiteSpace(output));
-                        }
-                        else
-                        {
-                            output = String.Empty;
-                            writeIt = false;
-                        }
-                    }
                     LogInvoke($"Result: {output}");
 
-                    if (writeIt)
+                    if (!String.IsNullOrWhiteSpace(output) || (output == Environment.NewLine))
                     {
                         LogInvoke($"Writing to file.....");
                         OutputLog(fileOutput, output);
@@ -266,15 +309,18 @@ namespace TextStrip
             lblStatus.Text = "Writing Full Log to file.....";
             Log(lblStatus.Text);
             LogToFile(PATH_LOG_FULL, txtLog.Text);
-            btnStart.Enabled = true;
-            lblStatus.Text = "DONE!";
-            Log("DONE!");
 
+            Log("Setting output file...");
             if (e.Result != null)
             {
                 string output = e.Result as string;
                 btnOutput.Tag = output;
+                Log("output filepath saved to button!");
             }
+
+            btnStart.Enabled = true;
+            lblStatus.Text = "DONE!";
+            Log("DONE!");
         }
         //################################################################################## Events
         private void btnStart_Click(object sender, EventArgs e)
